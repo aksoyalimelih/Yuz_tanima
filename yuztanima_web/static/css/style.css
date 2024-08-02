@@ -1,0 +1,16 @@
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+}
+
+#video-feed {
+    border: 1px solid #ddd;
+    background: #000;
+    display: none; /* Kamera kapalıyken gizli */
+}
+
+#identity {
+    margin-top: 10px;
+    font-size: 20px;
+    font-weight: bold;
+}

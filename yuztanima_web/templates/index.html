@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yüz Tanıma Sistemi</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+        }
+        #container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+        }
+        #video-feed {
+            border: 1px solid #ddd;
+            background: #000;
+            border-radius: 10px;
+            display: none;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #identity, #upload-identity {
+            font-size: 20px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        #upload-form {
+            margin-top: 20px;
+        }
+        input[type="file"], input[type="text"] {
+            margin: 10px;
+            font-size: 16px;
+        }
+        #uploaded-image {
+            margin-top: 20px;
+            max-width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+        }
+        h1, h2 {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+        #progress-bar-container {
+            margin-top: 20px;
+            font-size: 16px;
+        }
+        #progress-bar {
+            width: 0;
+            height: 20px;
+            background-color: #007bff;
+            border-radius: 5px;
+            transition: width 0.4s;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Yüz Tanıma Sistemi</h1>
+        <canvas id="video-feed" width="640" height="480"></canvas>
+        <button id="start-button">Kamera Başlat</button>
+        <button id="stop-button">Kamera Durdur</button>
+        <div id="identity"></div>
+
+        <div id="upload-form">
+            <h2>Resim Yükle</h2>
+            <input type="text" id="name-input" placeholder="Kimlik Giriniz" />
+            <input type="file" id="file-input" />
+            <button id="upload-button">Yükle</button>
+            <div id="upload-identity"></div>
+            <img id="uploaded-image" src="" alt="Yüklenen Resim" />
+            <div id="progress-bar-container">
+                <div id="progress-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+
+        const canvas = document.getElementById('video-feed');
+        const context = canvas.getContext('2d');
+        const startButton = document.getElementById('start-button');
+        const stopButton = document.getElementById('stop-button');
+        const identityElement = document.getElementById('identity');
+        const uploadButton = document.getElementById('upload-button');
+        const fileInput = document.getElementById('file-input');
+        const nameInput = document.getElementById('name-input');
+        const uploadIdentityElement = document.getElementById('upload-identity');
+        const uploadedImage = document.getElementById('uploaded-image');
+        const progressBar = document.getElementById('progress-bar');
+
+        function showVideoFeed() {
+            canvas.style.display = 'block';
+        }
+
+        function hideVideoFeed() {
+            canvas.style.display = 'none';
+        }
+
+        socket.on('status', data => {
+            console.log(data.status || data.error);
+        });
+
+        socket.on('identity', data => {
+            identityElement.innerText = `Kimlik: ${data.identity}`;
+        });
+
+        socket.on('video_frame', frame => {
+            const blob = new Blob([frame], { type: 'image/jpeg' });
+            const url = URL.createObjectURL(blob);
+            const img = new Image();
+            img.onload = () => {
+                context.drawImage(img, 0, 0, canvas.width, canvas.height);
+                URL.revokeObjectURL(url);
+            };
+            img.src = url;
+        });
+
+        startButton.addEventListener('click', () => {
+            socket.emit('start_camera');
+            socket.emit('stream');
+            showVideoFeed();
+        });
+
+        stopButton.addEventListener('click', () => {
+            socket.emit('stop_camera');
+            hideVideoFeed();
+        });
+
+        uploadButton.addEventListener('click', () => {
+            const file = fileInput.files[0];
+            const name = nameInput.value.trim();
+
+            if (!file || !name) {
+                alert('Lütfen dosya seçin ve kimlik girin.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('name', name);
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Dosya yüklenirken bir hata oluştu');
+                }
+                return response.json();
+            })
+            .then(data => {
+                uploadIdentityElement.innerText = `Yüklenen Resim Kimliği: ${data.identity}`;
+                const fileReader = new FileReader();
+                fileReader.onload = function(event) {
+                    uploadedImage.src = event.target.result;
+                };
+                fileReader.readAsDataURL(file);
+            })
+            .catch(error => {
+                console.error('Hata:', error);
+            });
+        });
+
+        // Yükleme ilerleme çubuğunu güncelle
+        function updateProgress(event) {
+            const percentComplete = (event.loaded / event.total) * 100;
+            progressBar.style.width = `${percentComplete}%`;
+        }
+
+        const xhr = new XMLHttpRequest();
+        xhr.upload.addEventListener('progress', updateProgress);
+    </script>
+</body>
+</html>
